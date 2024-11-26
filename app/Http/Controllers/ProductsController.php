@@ -77,29 +77,61 @@ class ProductsController extends Controller
 
 
 
-    public function editProduct(Request $request, $id) {
-
-        Log::info('Request data:', $request->all());
-
-        dd($request);
+    public function editProduct(Request $request) {
+ 
+        $id = $request->productId;
 
         $product = Products::where('productId', $id)->first();
-
+    
         if ($product === null) {
             return response()->json([
                 'product' => 'No product found'
             ], 404);
         }
-    
-        // Update the product title if provided
-        $product->update([
-            'productTitle' => $request->productTitle
-        ]);
-    
-        return response()->json([
-            'product' => $product  // Return the updated product data
+        
+        // Validate the incoming request
+        $productInfo = $request->validate([
+            'productTitle' => 'string|max:255',
+            'productCategory' => 'string|max:255',
+            'price' => 'numeric|min:0',
+            'packetPrice' => 'numeric|min:0',
+            'cartonPrice' => 'numeric|min:0',
+            'quantity' => 'integer|min:0',
+            'expiryDate' => 'date|after:today',
+            'productImage' => '',
         ]);
 
+        // Handle image update if a new image is uploaded
+        if ($request->hasFile('productImage')) {
+            // Delete the old image if it exists
+            if ($product->productImage) {
+                Storage::disk('public')->delete($product->productImage);
+            }
+
+            // Store the new image and update the image path
+            $productInfo['productImage'] = $request->file('productImage')->store('product_images', 'public');
+        } else {
+            // Keep the old image path if no new image is uploaded
+            $productInfo['productImage'] = $product->productImage;
+        }
+
+        // Perform the update and check the result
+        $updateResult = $product->update($productInfo);
+
+        if ($updateResult) {
+            // Reload the product data after update
+            $product->refresh();
+
+            return response()->json([
+                'message' => 'Product updated successfully',
+                'product' => $product
+            ], 200);
+        } else {
+            return response()->json([
+                'message' => 'Failed to update product',
+                'status' => false
+            ], 500);
+        }
 
     }
     

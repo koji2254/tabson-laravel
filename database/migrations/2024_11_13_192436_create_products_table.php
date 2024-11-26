@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->bigInteger('productId');
             $table->string('productImage')->nullable();
-            $table->string('productTitle')->default('');
+            $table->string('productTitle')->nullable();
             $table->string('productCategory')->nullable();
             $table->decimal('price', 8, 2);
             $table->decimal('packetPrice', 8, 2)->nullable();
