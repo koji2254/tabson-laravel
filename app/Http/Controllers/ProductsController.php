@@ -10,25 +10,42 @@ use Illuminate\Support\Facades\Storage;
 class ProductsController extends Controller
 {
 
-    public function allProducts(){
-
+    public function allProducts() {
+        
         $products = Products::all();
     
-        return response()->json(['products' => $products], 201);
+        // Convert image paths to URLs
+        $products->transform(function ($product) {
+            if ($product->productImage) {
+                $product->productImage = url('productImages/' . basename($product->productImage));
+            }
+            return $product;
+        });
+    
+        return response()->json([
+            'products' => $products
+        ], 200);
     }
+    
 
-    public function singleProduct($id){
-
+    public function singleProduct($id) {
         $product = Products::where('productId', $id)->first();
-
-        if ($product) {
-            $product->productImage = asset('storage/' . $product->productImage); // Adjust path if stored differently
+    
+        if (!$product) {
+            return response()->json([
+                'message' => 'Product not found',
+                'status' => false
+            ], 404);
         }
-
-        return response()->json(['product' => $product], 200);
-
-        
+    
+        // Convert image path to a full URL
+        $product->productImage = url('productImages/' . basename($product->productImage));
+    
+        return response()->json([
+            'product' => $product
+        ], 200);
     }
+    
     
     public function addProduct(Request $request){
 
@@ -43,11 +60,13 @@ class ProductsController extends Controller
             'productImage' => 'nullable|image|mimes:jpg,jpeg,png,gif|max:2048',  // Optional image validation
         ]);
 
-         // If there's an image, handle the file upload
         if ($request->hasFile('productImage')) {
-            $imagePath = $request->file('productImage')->store('product_images', 'public');
+            $image = $request->file('productImage');
+            $imageName = time() . '_' . $image->getClientOriginalName(); // Unique name
+            $image->move(public_path('productImages'), $imageName); // Save in public directory
+            $imagePath = 'productImages/' . $imageName; // Relative path to store in DB
         } else {
-            $imagePath = null;  // Or set a default image path if necessary
+            $imagePath = null;
         }
 
 
@@ -101,19 +120,19 @@ class ProductsController extends Controller
             'productImage' => '',
         ]);
 
-        // Handle image update if a new image is uploaded
         if ($request->hasFile('productImage')) {
             // Delete the old image if it exists
-            if ($product->productImage) {
-                Storage::disk('public')->delete($product->productImage);
+            if ($product->productImage && file_exists(public_path($product->productImage))) {
+                unlink(public_path($product->productImage)); // Delete old image
             }
-
-            // Store the new image and update the image path
-            $productInfo['productImage'] = $request->file('productImage')->store('product_images', 'public');
-        } else {
-            // Keep the old image path if no new image is uploaded
-            $productInfo['productImage'] = $product->productImage;
+        
+            // Save the new image
+            $image = $request->file('productImage');
+            $imageName = time() . '_' . $image->getClientOriginalName();
+            $image->move(public_path('productImages'), $imageName);
+            $productInfo['productImage'] = 'productImages/' . $imageName;
         }
+        
 
         // Perform the update and check the result
         $updateResult = $product->update($productInfo);
@@ -134,24 +153,35 @@ class ProductsController extends Controller
         }
 
     }
-    
+
+
+
     
     public function deleteProduct($id){
         $product = Products::where('productId', $id)->first();
-
-        if(!$product) {
+    
+        if (!$product) {
             return response()->json([ 
                 'message' => 'No Product found',
                 'product' => '',
                 'status' => false
             ], 404); 
         }
-
-        $product->delete(); // Save the product with deleted information
     
-        return response()->json(['message' => 'Product deleted successfully', 'status' => true], 200);
-
+        // Delete the image from the public directory
+        if ($product->productImage && file_exists(public_path($product->productImage))) {
+            unlink(public_path($product->productImage)); // Delete the image file
+        }
+    
+        // Delete the product record from the database
+        $product->delete(); 
+        
+        return response()->json([
+            'message' => 'Product deleted successfully',
+            'status' => true
+        ], 200);
     }
+    
 
 
 }
